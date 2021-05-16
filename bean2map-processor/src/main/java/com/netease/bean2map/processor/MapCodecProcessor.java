@@ -84,7 +84,6 @@ public class MapCodecProcessor extends AbstractProcessor {
      * returned is a primitive or the wrapper for {@code boolean}. NOTE: the latter does strictly not comply to the bean
      * convention. The remainder of the name is supposed to reflect the property name.
      * <p>
-     * The calling MapStruct code guarantees that the given method has no arguments.
      *
      * @param method to be analyzed
      * @return {@code true} when the method is a getter.
@@ -111,7 +110,6 @@ public class MapCodecProcessor extends AbstractProcessor {
      * Returns {@code true} when the {@link ExecutableElement} is a setter method. A setter starts with 'set'. The
      * remainder of the name is supposed to reflect the property name.
      * <p>
-     * The calling MapStruct code guarantees that there's only one argument.
      *
      * @param method to be analyzed
      * @return {@code true} when the method is a setter.
