@@ -208,7 +208,7 @@ public class MapCodecProcessor extends AbstractProcessor {
                     .addModifiers(Modifier.PUBLIC)
                     .addParameter(ParameterSpec.builder(typeName, "entity").build())
                     .returns(ParameterizedTypeName.get(Map.class, String.class, Object.class))
-                    .addStatement("$T map = new $T<>();",
+                    .addStatement("$T map = new $T<>()",
                             ParameterizedTypeName.get(Map.class, String.class, Object.class),
                             HashMap.class);
 
@@ -219,7 +219,7 @@ public class MapCodecProcessor extends AbstractProcessor {
                                     .get(Map.class, String.class, Object.class), "map")
                             .build())
                     .returns(typeName)
-                    .addStatement("$T entity = new $T();", typeMirror, typeMirror);
+                    .addStatement("$T entity = new $T()", typeMirror, typeMirror);
 
             MethodSpec.Builder filterBuild = MethodSpec.methodBuilder("filter")
                     .addModifiers(Modifier.PUBLIC)
@@ -228,7 +228,7 @@ public class MapCodecProcessor extends AbstractProcessor {
                                     .get(Map.class, String.class, Object.class), "map")
                             .build())
                     .returns(ParameterizedTypeName.get(Map.class, String.class, Object.class))
-                    .addStatement("$T result = new $T<>();",
+                    .addStatement("$T result = new $T<>()",
                             ParameterizedTypeName.get(Map.class, String.class, Object.class),
                             HashMap.class);
 
