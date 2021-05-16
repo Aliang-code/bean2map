@@ -13,6 +13,7 @@ import javax.lang.model.element.ExecutableElement;
 import javax.lang.model.element.Modifier;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import javax.lang.model.util.SimpleElementVisitor6;
@@ -77,6 +78,98 @@ public class MapCodecProcessor extends AbstractProcessor {
         }
     }
 
+    private void generateFile(TypeElement element) {
+        String clazzName = element.getQualifiedName().toString();
+        TypeMirror typeMirror = element.asType();
+        TypeName typeName = TypeName.get(typeMirror);
+        int lastIndex = clazzName.lastIndexOf('.');
+        String _package = clazzName.substring(0, lastIndex);
+        String _entity = clazzName.substring(lastIndex + 1);
+        String _codec = _entity + "_MapCodec";
+        try {
+            MethodSpec.Builder codeBuild = MethodSpec.methodBuilder("code")
+                    .addModifiers(Modifier.PUBLIC)
+                    .addParameter(ParameterSpec.builder(typeName, "entity").build())
+                    .returns(ParameterizedTypeName.get(Map.class, String.class, Object.class))
+                    .addStatement("$T map = new $T<>()",
+                            ParameterizedTypeName.get(Map.class, String.class, Object.class),
+                            HashMap.class);
+
+            MethodSpec.Builder decodeBuild = MethodSpec.methodBuilder("decode")
+                    .addModifiers(Modifier.PUBLIC)
+                    .addParameter(ParameterSpec
+                            .builder(ParameterizedTypeName
+                                    .get(Map.class, String.class, Object.class), "map")
+                            .build())
+                    .returns(typeName)
+                    .addStatement("$T entity = new $T()", typeMirror, typeMirror);
+
+            MethodSpec.Builder filterBuild = MethodSpec.methodBuilder("filter")
+                    .addModifiers(Modifier.PUBLIC)
+                    .addParameter(ParameterSpec
+                            .builder(ParameterizedTypeName
+                                    .get(Map.class, String.class, Object.class), "map")
+                            .build())
+                    .returns(ParameterizedTypeName.get(Map.class, String.class, Object.class))
+                    .addStatement("$T result = new $T<>()",
+                            ParameterizedTypeName.get(Map.class, String.class, Object.class),
+                            HashMap.class);
+
+            //获取所有公共方法，包括继承
+            List<ExecutableElement> methods = ExecutableUtils.getAllEnclosedExecutableElements(processingEnv.getElementUtils(), element);
+            for (ExecutableElement method : methods) {
+                String methodName = method.getSimpleName().toString();
+                Ignore ignore = method.getAnnotation(Ignore.class);
+                if (ignore == null) {
+                    if (isGetterMethod(method)) {
+                        String propertyName = getPropertyName(method);
+                        boolean isPrimitive = method.getReturnType() instanceof PrimitiveType;
+                        //非基本类型进行判空
+                        if (!isPrimitive) {
+                            codeBuild.beginControlFlow("if(entity.$L()!=null)", methodName);
+                        }
+                        codeBuild.addStatement("map.put($S, entity.$L())", propertyName, methodName);
+                        if (!isPrimitive) {
+                            codeBuild.endControlFlow();
+                        }
+
+                        filterBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
+                        filterBuild.addStatement("result.put($S, map.get($S))", propertyName, propertyName);
+                        filterBuild.endControlFlow();
+                    } else if (isSetterMethod(method)) {
+                        String propertyName = getPropertyName(method);
+                        decodeBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
+                        decodeBuild.addStatement("entity.$L(($T) map.get($S))",
+                                methodName, method.getParameters().get(0).asType(), propertyName);
+                        decodeBuild.endControlFlow();
+                    }
+                }
+            }
+            codeBuild.addStatement("return map");
+            decodeBuild.addStatement("return entity");
+            filterBuild.addStatement("return result");
+
+            TypeSpec helloWorld = TypeSpec.classBuilder(_codec)
+                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
+                    .addSuperinterface(ParameterizedTypeName.get(
+                            ClassName.get(IMapCodec.class), typeName))
+                    .addMethod(codeBuild.build())
+                    .addMethod(decodeBuild.build())
+                    .addMethod(filterBuild.build())
+                    .build();
+
+            JavaFile javaFile = JavaFile.builder(_package, helloWorld)
+                    .build();
+            //生成文件
+            javaFile.writeTo(processingEnv.getFiler());
+            codecNames.add(_package + "." + _codec);
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "process codec success:" + _codec, element);
+        } catch (Exception e) {
+            e.printStackTrace();
+            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "process codec error:" + e.getMessage(), element);
+        }
+    }
+
     /**
      * Returns {@code true} when the {@link ExecutableElement} is a getter method. A method is a getter when it
      * has no parameters, starts
@@ -101,7 +194,7 @@ public class MapCodecProcessor extends AbstractProcessor {
         boolean isBooleanGetterName = methodName.startsWith("is") && methodName.length() > 2;
         TypeElement paramType = getTypeElement(method.getReturnType());
         boolean returnTypeIsBoolean = method.getReturnType().getKind() == TypeKind.BOOLEAN ||
-                (paramType != null && "java.lang.Boolean".equals(paramType.getQualifiedName().toString()));
+                (paramType != null && Boolean.class.getName().equals(paramType.getQualifiedName().toString()));
 
         return isNonBooleanGetterName || (isBooleanGetterName && returnTypeIsBoolean);
     }
@@ -165,7 +258,7 @@ public class MapCodecProcessor extends AbstractProcessor {
                 null
         );
 
-        return typeElement != null ? typeElement : null;
+        return typeElement;
     }
 
 
@@ -193,90 +286,5 @@ public class MapCodecProcessor extends AbstractProcessor {
         char[] chars = name.toCharArray();
         chars[0] = Character.toLowerCase(chars[0]);
         return new String(chars);
-    }
-
-    private void generateFile(TypeElement element) {
-        String clazzName = element.getQualifiedName().toString();
-        TypeMirror typeMirror = element.asType();
-        TypeName typeName = TypeName.get(typeMirror);
-        int lastIndex = clazzName.lastIndexOf('.');
-        String _package = clazzName.substring(0, lastIndex);
-        String _entity = clazzName.substring(lastIndex + 1);
-        String _codec = _entity + "_MapCodec";
-        try {
-            MethodSpec.Builder codeBuild = MethodSpec.methodBuilder("code")
-                    .addModifiers(Modifier.PUBLIC)
-                    .addParameter(ParameterSpec.builder(typeName, "entity").build())
-                    .returns(ParameterizedTypeName.get(Map.class, String.class, Object.class))
-                    .addStatement("$T map = new $T<>()",
-                            ParameterizedTypeName.get(Map.class, String.class, Object.class),
-                            HashMap.class);
-
-            MethodSpec.Builder decodeBuild = MethodSpec.methodBuilder("decode")
-                    .addModifiers(Modifier.PUBLIC)
-                    .addParameter(ParameterSpec
-                            .builder(ParameterizedTypeName
-                                    .get(Map.class, String.class, Object.class), "map")
-                            .build())
-                    .returns(typeName)
-                    .addStatement("$T entity = new $T()", typeMirror, typeMirror);
-
-            MethodSpec.Builder filterBuild = MethodSpec.methodBuilder("filter")
-                    .addModifiers(Modifier.PUBLIC)
-                    .addParameter(ParameterSpec
-                            .builder(ParameterizedTypeName
-                                    .get(Map.class, String.class, Object.class), "map")
-                            .build())
-                    .returns(ParameterizedTypeName.get(Map.class, String.class, Object.class))
-                    .addStatement("$T result = new $T<>()",
-                            ParameterizedTypeName.get(Map.class, String.class, Object.class),
-                            HashMap.class);
-
-            //获取所有公共方法，包括继承
-            List<ExecutableElement> methods = ExecutableUtils.getAllEnclosedExecutableElements(processingEnv.getElementUtils(), element);
-            for (ExecutableElement method : methods) {
-                String methodName = method.getSimpleName().toString();
-                Ignore ignore = method.getAnnotation(Ignore.class);
-                if (ignore == null) {
-                    if (isGetterMethod(method)) {
-                        String propertyName = getPropertyName(method);
-                        codeBuild.beginControlFlow("if(entity.$L()!=null)", methodName);
-                        codeBuild.addStatement("map.put($S, entity.$L())", propertyName, methodName);
-                        codeBuild.endControlFlow();
-                        filterBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
-                        filterBuild.addStatement("result.put($S, map.get($S))", propertyName, propertyName);
-                        filterBuild.endControlFlow();
-                    } else if (isSetterMethod(method)) {
-                        String propertyName = getPropertyName(method);
-                        decodeBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
-                        decodeBuild.addStatement("entity.$L(($T) map.get($S))",
-                                methodName, method.getParameters().get(0).asType(), propertyName);
-                        decodeBuild.endControlFlow();
-                    }
-                }
-            }
-            codeBuild.addStatement("return map");
-            decodeBuild.addStatement("return entity");
-            filterBuild.addStatement("return result");
-
-            TypeSpec helloWorld = TypeSpec.classBuilder(_codec)
-                    .addModifiers(Modifier.PUBLIC, Modifier.FINAL)
-                    .addSuperinterface(ParameterizedTypeName.get(
-                            ClassName.get(IMapCodec.class), typeName))
-                    .addMethod(codeBuild.build())
-                    .addMethod(decodeBuild.build())
-                    .addMethod(filterBuild.build())
-                    .build();
-
-            JavaFile javaFile = JavaFile.builder(_package, helloWorld)
-                    .build();
-            //生成文件
-            javaFile.writeTo(processingEnv.getFiler());
-            codecNames.add(_package + "." + _codec);
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "process codec success:" + _codec, element);
-        } catch (Exception e) {
-            e.printStackTrace();
-            processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "process codec error:" + e.getMessage(), element);
-        }
     }
 }
