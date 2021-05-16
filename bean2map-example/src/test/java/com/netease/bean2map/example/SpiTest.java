@@ -1,15 +1,15 @@
 package com.netease.bean2map.example;
 
-import org.junit.Assert;
-import org.junit.Test;
 import com.netease.bean2map.codec.IMapCodec;
 import com.netease.bean2map.codec.MapCodecRegister;
+import org.junit.Assert;
+import org.junit.Test;
 
 import java.util.Collections;
 import java.util.Map;
 
 /**
- * @author Sjaak Derksen
+ * @author aliang
  */
 public class SpiTest {
     /**
