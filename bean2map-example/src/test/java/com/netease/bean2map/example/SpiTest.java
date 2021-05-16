@@ -17,16 +17,17 @@ public class SpiTest {
      */
     @Test
     public void test() {
-        IMapCodec<Simple> codec=MapCodecRegister.getCodec(Simple.class);
-        Simple simple1=new Simple();
+        IMapCodec<Simple> codec = MapCodecRegister.getCodec(Simple.class);
+        Simple simple1 = new Simple();
         simple1.setId("111");
-        simple1.setRules(Collections.singletonList("test"));
+        simple1.setGoods(Collections.singletonMap("bbb", 111));
         simple1.setName("aaa");
-        simple1.setGoods(Collections.singletonMap("bbb",111));
-        Map<String,Object> map=codec.code(simple1);
+        simple1.setRules(Collections.singletonList("test"));
+        simple1.setValid(false);
+        Map<String, Object> map = codec.code(simple1);
         System.out.println(map);
-        Simple simple2=codec.decode(map);
+        Simple simple2 = codec.decode(map);
         System.out.println(codec.decode(map));
-        Assert.assertEquals(simple1,simple2);
+        Assert.assertEquals(simple1, simple2);
     }
 }

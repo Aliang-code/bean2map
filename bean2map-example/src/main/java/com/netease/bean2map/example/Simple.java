@@ -9,6 +9,7 @@ import java.util.Objects;
 public class Simple extends Parent {
     private String name;
     private List<String> rules;
+    private boolean valid;
 
     public String getName() {
         return name;
@@ -26,28 +27,36 @@ public class Simple extends Parent {
         this.rules = rules;
     }
 
+    public boolean isValid() {
+        return valid;
+    }
+
+    public void setValid(boolean valid) {
+        this.valid = valid;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof Simple)) return false;
         if (!super.equals(o)) return false;
         Simple simple = (Simple) o;
-        return Objects.equals(name, simple.name) &&
+        return valid == simple.valid &&
+                Objects.equals(name, simple.name) &&
                 Objects.equals(rules, simple.rules);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), name, rules);
+        return Objects.hash(super.hashCode(), name, rules, valid);
     }
 
     @Override
     public String toString() {
         return "Simple{" +
-                "id='" + getId() + '\'' +
-                ", goods=" + getGoods() +
-                ", name='" + name + '\'' +
+                "name='" + name + '\'' +
                 ", rules=" + rules +
+                ", valid=" + valid +
                 '}';
     }
 }
