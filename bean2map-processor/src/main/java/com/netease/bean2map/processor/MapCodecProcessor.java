@@ -239,13 +239,19 @@ public class MapCodecProcessor extends AbstractProcessor {
                 Ignore ignore = method.getAnnotation(Ignore.class);
                 if (ignore == null) {
                     if (isGetterMethod(method)) {
+                        String propertyName = getPropertyName(method);
                         codeBuild.beginControlFlow("if(entity.$L()!=null)", methodName);
-                        codeBuild.addStatement("map.put($S, entity.$L())", getPropertyName(method), methodName);
+                        codeBuild.addStatement("map.put($S, entity.$L())", propertyName, methodName);
                         codeBuild.endControlFlow();
-                        filterBuild.addStatement("result.put($S, map.get($S))", getPropertyName(method), getPropertyName(method));
+                        filterBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
+                        filterBuild.addStatement("result.put($S, map.get($S))", propertyName, propertyName);
+                        filterBuild.endControlFlow();
                     } else if (isSetterMethod(method)) {
+                        String propertyName = getPropertyName(method);
+                        decodeBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
                         decodeBuild.addStatement("entity.$L(($T) map.get($S))",
-                                methodName, method.getParameters().get(0).asType(), getPropertyName(method));
+                                methodName, method.getParameters().get(0).asType(), propertyName);
+                        decodeBuild.endControlFlow();
                     }
                 }
             }
