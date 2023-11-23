@@ -4,7 +4,7 @@
 
     <groupId>com.netease</groupId>
     <artifactId>bean2map-parent</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <properties>
@@ -43,7 +43,34 @@
                     <artifactId>maven-compiler-plugin</artifactId>
                     <version>3.8.1</version>
                 </plugin>
+                <!-- 打包 source.jar -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-source-plugin</artifactId>
+                    <version>3.2.0</version>
+                    <executions>
+                        <execution>
+                            <id>attach-sources</id>
+                            <goals>
+                                <goal>jar</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
             </plugins>
         </pluginManagement>
     </build>
+
+    <distributionManagement>
+        <repository>
+            <id>hz_repo</id>
+            <name>hz_repo-releases</name>
+            <url>http://mvn.hz.netease.com/artifactory/libs-releases</url>
+        </repository>
+        <snapshotRepository>
+            <id>hz_repo</id>
+            <name>hz_repo-snapshots</name>
+            <url>http://mvn.hz.netease.com/artifactory/libs-snapshots</url>
+        </snapshotRepository>
+    </distributionManagement>
 </project>
