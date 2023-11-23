@@ -1,17 +1,12 @@
 package com.netease.bean2map.processor;
 
-import com.netease.bean2map.codec.IMapCodec;
-import com.netease.bean2map.codec.Ignore;
-import com.netease.bean2map.codec.MapCodecRegister;
+import com.netease.bean2map.codec.*;
 import com.squareup.javapoet.*;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.Modifier;
-import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.PrimitiveType;
 import javax.lang.model.type.TypeKind;
@@ -24,6 +19,7 @@ import javax.tools.StandardLocation;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.function.Consumer;
 
@@ -78,6 +74,18 @@ public class MapCodecProcessor extends AbstractProcessor {
         }
     }
 
+    private static final Set<String> CAST_TYPE_SET = new HashSet<String>() {{
+        add(Byte.class.getName());
+        add(Character.class.getName());
+        add(Short.class.getName());
+        add(Integer.class.getName());
+        add(Long.class.getName());
+        add(Float.class.getName());
+        add(Double.class.getName());
+        add(Date.class.getName());
+        add(Boolean.class.getName());
+    }};
+
     private void generateFile(TypeElement element) {
         String clazzName = element.getQualifiedName().toString();
         TypeMirror typeMirror = element.asType();
@@ -117,18 +125,49 @@ public class MapCodecProcessor extends AbstractProcessor {
 
             //获取所有公共方法，包括继承
             List<ExecutableElement> methods = ExecutableUtils.getAllEnclosedExecutableElements(processingEnv.getElementUtils(), element);
+
+            Map<String, Element> allField = getAllField(element);
+            String dateClass = Date.class.getName();
+            //processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "process element field:" + allField);
             for (ExecutableElement method : methods) {
                 String methodName = method.getSimpleName().toString();
                 Ignore ignore = method.getAnnotation(Ignore.class);
+                DateFormat dateFormat = method.getAnnotation(DateFormat.class);
                 if (ignore == null) {
-                    if (isGetterMethod(method)) {
-                        String propertyName = getPropertyName(method);
+                    boolean isGetter = isGetterMethod(method);
+                    boolean isSetter = isSetterMethod(method);
+                    if (!isGetter && !isSetter) {
+                        continue;
+                    }
+                    String propertyName = getPropertyName(method);
+                    Element field = allField.get(propertyName);
+                    if (field != null) {
+                        ignore = field.getAnnotation(Ignore.class);
+                        if (ignore != null) {
+                            continue;
+                        }
+                        if (dateFormat == null) {
+                            dateFormat = field.getAnnotation(DateFormat.class);
+                        }
+                    }
+                    //processingEnv.getMessager().printMessage(Diagnostic.Kind.NOTE, "process method:" + methodName + ",return type:" + method.getReturnType().toString());
+                    if (isGetter) {
                         boolean isPrimitive = method.getReturnType() instanceof PrimitiveType;
                         //非基本类型进行判空
                         if (!isPrimitive) {
                             codeBuild.beginControlFlow("if(entity.$L()!=null)", methodName);
                         }
-                        codeBuild.addStatement("map.put($S, entity.$L())", propertyName, methodName);
+                        if (dateFormat != null && dateClass.equals(method.getReturnType().toString())) {
+                            if (dateFormat.timestamp()) {
+                                codeBuild.addStatement("map.put($S, entity.$L().getTime())", propertyName, methodName);
+                            } else {
+                                String formatName = propertyName + "Formatter";
+                                codeBuild.addStatement("$T $N=new $T($S)", SimpleDateFormat.class, formatName, SimpleDateFormat.class, dateFormat.pattern());
+                                codeBuild.addStatement("map.put($S, $N.format(entity.$L()))", propertyName, formatName, methodName);
+                            }
+                        } else {
+                            codeBuild.addStatement("map.put($S, entity.$L())", propertyName, methodName);
+                        }
                         if (!isPrimitive) {
                             codeBuild.endControlFlow();
                         }
@@ -136,11 +175,22 @@ public class MapCodecProcessor extends AbstractProcessor {
                         filterBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
                         filterBuild.addStatement("result.put($S, map.get($S))", propertyName, propertyName);
                         filterBuild.endControlFlow();
-                    } else if (isSetterMethod(method)) {
-                        String propertyName = getPropertyName(method);
+                    } else if (isSetter) {
                         decodeBuild.beginControlFlow("if(map.get($S)!=null)", propertyName);
-                        decodeBuild.addStatement("entity.$L(($T) map.get($S))",
-                                methodName, method.getParameters().get(0).asType(), propertyName);
+                        // 需要增加type强转
+                        TypeMirror propertyType = method.getParameters().get(0).asType();
+                        if (propertyType instanceof PrimitiveType) {
+                            propertyType = processingEnv.getTypeUtils().boxedClass((PrimitiveType) propertyType).asType();
+                        }
+                        String[] arr = propertyType.toString().split("\\.");
+                        String tp = arr[arr.length - 1];
+                        if (CAST_TYPE_SET.contains(propertyType.toString())) {
+                            decodeBuild.addStatement("entity.$L($T.castTo$L(map.get($S)))",
+                                    methodName, TypeUtils.class, tp, propertyName);
+                        } else {
+                            decodeBuild.addStatement("entity.$L(($T) map.get($S))",
+                                    methodName, method.getParameters().get(0).asType(), propertyName);
+                        }
                         decodeBuild.endControlFlow();
                     }
                 }
@@ -168,6 +218,24 @@ public class MapCodecProcessor extends AbstractProcessor {
             e.printStackTrace();
             processingEnv.getMessager().printMessage(Diagnostic.Kind.ERROR, "process codec error:" + e.getMessage(), element);
         }
+    }
+
+    public Map<String, Element> getAllField(TypeElement element) {
+        Map<String, Element> fieldMap = new HashMap<>();
+        TypeElement superClass = element;
+        while (superClass != null) {
+            for (Element e : superClass.getEnclosedElements()) {
+                if (e.getKind() == ElementKind.FIELD) {
+                    fieldMap.put(e.getSimpleName().toString(), e);
+                }
+            }
+            TypeMirror superType = superClass.getSuperclass();
+            if (superType == null) {
+                break;
+            }
+            superClass = getTypeElement(superType);
+        }
+        return fieldMap;
     }
 
     /**

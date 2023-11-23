@@ -1,11 +1,17 @@
 package com.netease.bean2map.example;
 
+import com.netease.bean2map.codec.DateFormat;
+
+import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
 
 public class Parent {
     private String id;
+    private Long name;
     private Map<String,Object> goods;
+    @DateFormat(pattern = "yyyy-MM-dd", timestamp = true)
+    private Date createTime;
 
     public String getId() {
         return id;
@@ -13,6 +19,14 @@ public class Parent {
 
     public void setId(String id) {
         this.id = id;
+    }
+
+    public Long getName() {
+        return name;
+    }
+
+    public void setName(Long name) {
+        this.name = name;
     }
 
     public Map<String, Object> getGoods() {
@@ -47,5 +61,13 @@ public class Parent {
                 "id='" + id + '\'' +
                 ", goods=" + goods +
                 '}';
+    }
+
+    public Date getCreateTime() {
+        return createTime;
+    }
+
+    public void setCreateTime(Date createTime) {
+        this.createTime = createTime;
     }
 }

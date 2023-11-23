@@ -11,10 +11,6 @@ public class Simple extends Parent {
     private List<String> rules;
     private boolean valid;
 
-    public String getName() {
-        return name;
-    }
-
     public void setName(String name) {
         this.name = name;
     }
